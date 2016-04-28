@@ -306,7 +306,6 @@ class TangoEpics (PyTango.Device_4Impl):
                 # add attribute
                 self.add_attribute(attr, read_method, write_method)
         except Exception, e:
-            raise
             msg = 'Unable to create dynamic attributes'
             self.error_stream('%s: %s' % (msg, str(e)))
             self._set_state(PyTango.DevState.FAULT, msg)
