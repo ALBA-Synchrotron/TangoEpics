@@ -94,6 +94,7 @@ class TangoEpics (PyTango.Device_4Impl):
     def __init__(self, cl, name):
         PyTango.Device_4Impl.__init__(self, cl, name)
         self.debug_stream("In __init__()")
+        self.pv = None
         TangoEpics.init_device(self)
         # ----- PROTECTED REGION ID(TangoEpics.__init__) ENABLED START -----#
         # ----- PROTECTED REGION END -----#	//	TangoEpics.__init__
@@ -101,13 +102,16 @@ class TangoEpics (PyTango.Device_4Impl):
     def delete_device(self):
         self.debug_stream("In delete_device()")
         # ----- PROTECTED REGION ID(TangoEpics.delete_device) ENABLED START --#
+        self.pv = None
         # ----- PROTECTED REGION END -----#	//	TangoEpics.delete_device
 
     def init_device(self):
         self.debug_stream("In init_device()")
         self.get_device_properties(self.get_device_class())
         # ----- PROTECTED REGION ID(TangoEpics.init_device) ENABLED START ----#
-        self._set_state(PyTango.DevState.ON, 'All PV correctly read')
+        self._set_state(PyTango.DevState.INIT, 'Initializing', force_init=True)
+        self.initialize_dynamic_attributes()
+        self._set_state(PyTango.DevState.ON, 'All PVs accesible')
         # ----- PROTECTED REGION END -----#	//	TangoEpics.init_device
 
     def always_executed_hook(self):
@@ -125,16 +129,24 @@ class TangoEpics (PyTango.Device_4Impl):
         self.debug_stream("In read_attr_hardware()")
         # ----- PROTECTED REGION ID(TangoEpics.read_attr_hardware) ENABLED
         # START -----#
-        epics.ca.use_initial_context()
-        # read all PVs
-        for attr_idx in data:
-            attr_name =\
-                self.get_device_attr().get_attr_by_ind(attr_idx).get_name()
-            ch_id = self.pv[attr_name][0]
-            # we don't wait until we get the value: will be done once for all
-            epics.ca.get(ch_id, wait=False)
-        # wait for reading completion of all PVs
-        epics.ca.poll()
+        if self.pv is None:  # nothing to do if not initialized
+            return
+        try:
+            epics.ca.use_initial_context()
+            # read all PVs
+            for attr_idx in data:
+                attr_name = \
+                    self.get_device_attr().get_attr_by_ind(attr_idx).get_name()
+                ch_id = self.pv[attr_name][0]
+                # we don't wait until we get the value:
+                # will be done once for all
+                epics.ca.get(ch_id, wait=False)
+            # wait for reading completion of all PVs
+            epics.ca.poll()
+        except Exception, e:
+            msg = 'Error while reading PVs. Please check communication.'
+            self.error_stream('%s:\n%s' % (msg, str(e)))
+            self._set_state(PyTango.DevState.ALARM, msg)
         # ----- PROTECTED REGION END -----#	//	TangoEpics.read_attr_hardware
 
     # -------------------------------------------------------------------------
@@ -201,6 +213,9 @@ class TangoEpics (PyTango.Device_4Impl):
 
     # ----- PROTECTED REGION ID(TangoEpics.programmer_methods) ENABLED START -#
     def initialize_dynamic_attributes(self):
+        self.debug_stream('In initialize_dynamic_attributes()')
+        if self.pv is not None:  # already initialized
+            return
         # variables initialization
         READ_METHOD = self.read_attr
         WRITE_METHOD = self.write_attr
@@ -246,7 +261,13 @@ class TangoEpics (PyTango.Device_4Impl):
 
             # connect PVs and get necessary info
             for name, data in pvs.items():
-                epics.ca.connect_channel(data[0])
+                connected = epics.ca.connect_channel(data[0])
+                if not connected:
+                    msg = 'At least one channel unreachable. Is hardware up?'
+                    self.error_stream(msg)
+                    self._set_state(PyTango.DevState.FAULT,
+                                    msg, force_init=True)
+                    return
             epics.ca.poll()  # wait for connections completion
             for name, data in pvs.items():
                 data.append(epics.ca.field_type(data[0]))
@@ -327,9 +348,15 @@ class TangoEpics (PyTango.Device_4Impl):
             ch_id = self.pv[attr_name][0]
             # reading of PVs was requested on read_attr_hardware(): now only
             value = epics.ca.get_complete(ch_id)        # retrieve the value
+            if value is None:  # reading failed
+                attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
+                msg = 'Error reading attribute %s' % attr_name
+                self.error_stream(msg)
+                self._set_state(PyTango.DevState.ALARM, msg)
         except Exception, e:
             msg = 'Error reading attribute %s' % attr_name
             self.error_stream('%s: %s' % (msg, str(e)))
+            self._set_state(PyTango.DevState.ALARM, msg)
             PyTango.Except.throw_exception(
                 'Read error',
                 msg,
@@ -358,7 +385,7 @@ class TangoEpics (PyTango.Device_4Impl):
         # don't allow to change FAULT state unless initialing
         if (current_state in [PyTango.DevState.FAULT]) and not force_init:
             return
-        if new_state is current_state:
+        if new_state != current_state:
             self.set_state(new_state)
         if new_status is not None:
             self.set_status(new_status)
