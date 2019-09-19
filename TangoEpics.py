@@ -143,7 +143,7 @@ class TangoEpics (PyTango.Device_4Impl):
                 epics.ca.get(ch_id, wait=False)
             # wait for reading completion of all PVs
             epics.ca.poll()
-        except Exception, e:
+        except Exception as e:
             msg = 'Error while reading PVs. Please check communication.'
             self.error_stream('%s:\n%s' % (msg, str(e)))
             self._set_state(PyTango.DevState.ALARM, msg)
@@ -201,7 +201,7 @@ class TangoEpics (PyTango.Device_4Impl):
             argout = argout.replace('%s:' % self.Host, '')  # remove host part
         except KeyError:  # attribute doesn't exist: simply return empty string
             pass
-        except Exception, e:
+        except Exception as e:
             msg = 'Unexpected error:\n%s' % str(e)
             self.error_stream(msg)
             PyTango.Except.throw_exception(
@@ -326,7 +326,7 @@ class TangoEpics (PyTango.Device_4Impl):
                 attr.set_default_properties(properties)
                 # add attribute
                 self.add_attribute(attr, read_method, write_method)
-        except Exception, e:
+        except Exception as e:
             msg = 'Unable to create dynamic attributes'
             self.error_stream('%s: %s' % (msg, str(e)))
             self._set_state(PyTango.DevState.FAULT, msg)
@@ -337,7 +337,7 @@ class TangoEpics (PyTango.Device_4Impl):
             for attr_name in self.pv.keys():
                 self.remove_attribute(attr_name)
                 del self.pv[attr_name]
-        except Exception, e:
+        except Exception as e:
             self.error_stream(str(e))
 
     def read_attr(self, attr):
@@ -353,7 +353,7 @@ class TangoEpics (PyTango.Device_4Impl):
                 msg = 'Error reading attribute %s' % attr_name
                 self.error_stream(msg)
                 self._set_state(PyTango.DevState.ALARM, msg)
-        except Exception, e:
+        except Exception as e:
             msg = 'Error reading attribute %s' % attr_name
             self.error_stream('%s: %s' % (msg, str(e)))
             self._set_state(PyTango.DevState.ALARM, msg)
@@ -372,7 +372,7 @@ class TangoEpics (PyTango.Device_4Impl):
             epics.ca.use_initial_context()
             ch_id = self.pv[attr_name][0]
             epics.ca.put(ch_id, value, wait=True)
-        except Exception, e:
+        except Exception as e:
             msg = 'Error writing attribute %s' % attr_name
             self.error_stream('%s: %s' % (msg, str(e)))
             PyTango.Except.throw_exception(
@@ -596,9 +596,10 @@ def main():
         U.server_run()
 
     except PyTango.DevFailed as e:
-        print ('-------> Received a DevFailed exception:', e)
+        print('-------> Received a DevFailed exception:', e)
     except Exception as e:
-        print ('-------> An unforeseen exception occured....', e)
+        print('-------> An unforeseen exception occured....', e)
+
 
 if __name__ == '__main__':
     main()
