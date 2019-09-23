@@ -346,13 +346,16 @@ class TangoEpics (PyTango.Device_4Impl):
         try:
             epics.ca.use_initial_context()
             ch_id = self.pv[attr_name][0]
-            # reading of PVs was requested on read_attr_hardware(): now only
-            value = epics.ca.get_complete(ch_id)        # retrieve the value
+            # reading was requested on read_attr_hardware(): now get the data
+            value = epics.ca.get_complete(ch_id)
             if value is None:  # reading failed
                 attr.set_quality(PyTango.AttrQuality.ATTR_INVALID)
                 msg = 'Error reading attribute %s' % attr_name
                 self.error_stream(msg)
                 self._set_state(PyTango.DevState.ALARM, msg)
+            attr.set_value(value)
+            if self.PreserveTimestamp:
+                attr.set_date(PyTango.TimeVal(epics.ca.get_timestamp(ch_id)))
         except Exception as e:
             msg = 'Error reading attribute %s' % attr_name
             self.error_stream('%s: %s' % (msg, str(e)))
@@ -361,8 +364,6 @@ class TangoEpics (PyTango.Device_4Impl):
                 'Read error',
                 msg,
                 '%s.read_%s()' % (self.__class__.__name__, attr_name))
-        else:
-            attr.set_value(value)
 
     def write_attr(self, attr):
         attr_name = attr.get_name()
@@ -562,6 +563,10 @@ class TangoEpicsClass(PyTango.DeviceClass):
              "\nthe string _colon_ by providing the replacement "
              "string `:_colon_`",
              ["__", "-_", ":_", "._", "[_", "]_", "<_", ">_", ";_"]],
+        'PreserveTimestamp':
+            [PyTango.DevBoolean,
+             "Preserve EPICS timestamp for read attributes",
+             True],
         }
 
     #    Command definitions
